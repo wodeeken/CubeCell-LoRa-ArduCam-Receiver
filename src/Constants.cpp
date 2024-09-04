@@ -13,8 +13,9 @@ struct Constants{
     static constexpr char* FromTrans_Capture_Camera_Response = "<CAPTURE_CAMERA_RESPONSE {%d+}>";
     static constexpr char* ToHost_Capture_Camera_Response = "<CAPTURE_CAMERA_RESPONSE {PACKETS}>";
     static constexpr char* ToHost_Capture_Camera_Timeout = "<CAPTURE_CAMERA_TIMEOUT>";
+    static constexpr char* FromHost_Data_Transfer_Request = "<DATA_TRANSFER_REQUEST {%d+}>";
     static constexpr char* ToTrans_Data_Transfer_Command = "<DATA_TRANSFER_REQUEST {PACKET_NUM}>";
-    static constexpr char* FromTrans_Data_Transfer_Response = "^<DATA_TRANSFER_RESPONSE {%d+}>.*</DATA_TRANSFER_RESPONSE>$";
+    static constexpr char* FromTrans_Data_Transfer_Response = "^<DATA_TRANSFER_RESPONSE {%d+}>";
     static constexpr char* ToHost_Data_Transfer_Response_Header = "<DATA_TRANSFER_RESPONSE {PACKET_NUM}>";
     static constexpr char* ToHost_Data_Transfer_Response_Footer = "</DATA_TRANSFER_RESPONSE>";
     static constexpr char* ToHost_Data_Transfer_Error = "<DATA_TRANSFER_ERROR>";

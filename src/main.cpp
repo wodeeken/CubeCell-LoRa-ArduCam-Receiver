@@ -29,7 +29,7 @@
 
 #define RX_TIMEOUT_VALUE                            1000
 #define BUFFER_SIZE                                 128 // Max payload size.
-
+int packetTimeouts;
 int16_t rssi,rxSize;
 bool lora_idle = true;
 bool WaitingForResponse = false;
@@ -44,11 +44,11 @@ void OnTxTimeout();
 void OnRxTimeout();
 Constants::ReceiverState CurrentReceiverState = Constants::Wait;
 // variables for packet transfer.
-int currentTotalPacketCount;
 int currentPacketNumber;
 
 //const uint8_t 
 void setup() {
+    packetTimeouts = 0;
     // Setup serial.
     Serial.begin(38400);
     Serial.flush();
@@ -79,26 +79,43 @@ void loop()
   case Constants::Wait:
    turnOffRGB();
     // Read in from serial.
-    if(Serial.available() == 1){
+    if(true){
         // First, read in.
         String input = Serial.readString();
          //Serial.println("Echoing: " + input);
-        turnOnRGB(COLOR_JOINED, 10);
-        delay(500);
-        input.trim();
-        if(input.compareTo(Constants::FromHost_Ping_Command) == 0){
-            CurrentReceiverState = Constants::ReceiverPingRequest;
-        }else if(input.compareTo(Constants::FromHost_Ping_Camera_Command) == 0){
-            CurrentReceiverState = Constants::CameraPingRequest;
-        
-        }else if(input.compareTo(Constants::FromHost_Capture_Camera_Command) == 0)
-          CurrentReceiverState = Constants::CameraCaptureRequest;
-          else
-            {
-              //Serial.println("UNRECOGNIZED");
-              CurrentReceiverState = Constants::Wait;
+         if(input != ""){
+            turnOnRGB(COLOR_JOINED, 10);
+            delay(500);
+            input.trim();
+            if(input.compareTo(Constants::FromHost_Ping_Command) == 0){
+                CurrentReceiverState = Constants::ReceiverPingRequest;
+            }else if(input.compareTo(Constants::FromHost_Ping_Camera_Command) == 0){
+                CurrentReceiverState = Constants::CameraPingRequest;
+            
+            }else if(input.compareTo(Constants::FromHost_Capture_Camera_Command) == 0)
+              CurrentReceiverState = Constants::CameraCaptureRequest;
+            else{
+              // Parse the data packet we are requesting.
+              MatchState ms;
+              ms.Target((char*)input.c_str());
+              char result = ms.Match(Constants::FromHost_Data_Transfer_Request);
+              if(result == REGEXP_MATCHED){
+                char packetNumberLocation = ms.Match("%d+");
+                if(packetNumberLocation == REGEXP_MATCHED){
+                    int packetNumber = input.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
+                    currentPacketNumber = packetNumber;
+                    CurrentReceiverState = Constants::DataTransferRequest;
+                }else{
+                  Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "1");
+                }
+              }else{
+                Serial.println(String(Constants::ToHost_Data_Transfer_Error) + 2);
+              }
             }
-      }
+         }
+        
+        
+    }
     break;
   case Constants::ReceiverPingRequest:
     Serial.flush();
@@ -187,9 +204,9 @@ void loop()
         // use regex
         MatchState ms;
         ms.Target(rxpacket);
-        // Serial.print("<BEGIN>");
-        // Serial.print(rxpacket);
-        // Serial.print("<END>");
+        //Serial.println("<BEGIN>");
+        //Serial.println(rxpacket);
+        //Serial.println("<END>");
         // Serial.println(Constants::FromTrans_Capture_Camera_Response);
         char result = ms.Match(Constants::FromTrans_Capture_Camera_Response);
         if(result == REGEXP_MATCHED){
@@ -197,31 +214,36 @@ void loop()
           if(packetNumberLocation == REGEXP_MATCHED){
             
             int packetNumber = str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
+
             //Serial.println("Number of packets: " + String(packetNumber));
             if(packetNumber > 0){
               // Write back to host.
               //Serial.println("SETTING PACKET NUMBER!!");
-              currentTotalPacketCount = (int) packetNumber;
-              currentPacketNumber = 0;
+              //currentTotalPacketCount = (int) packetNumber;
+              //currentPacketNumber = 0;
               String toHostResponse = String(Constants::ToHost_Capture_Camera_Response);
               toHostResponse.replace("PACKETS", String(packetNumber));
               Serial.println(toHostResponse);
               
 
-              CurrentReceiverState = Constants::DataTransferRequest;
+              CurrentReceiverState = Constants::Wait;
             }else{
-              Serial.println(Constants::ToHost_Data_Transfer_Error);
+              //Serial.println("1");
+              
+              Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "3");
               CurrentReceiverState = Constants::Wait;
             }
           }else{
-            Serial.println(Constants::ToHost_Data_Transfer_Error);
+            //Serial.println("2");
+            Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "4");
             CurrentReceiverState = Constants::Wait;
           }
           
           
         }
         else{
-          Serial.println(Constants::ToHost_Data_Transfer_Error);
+          //Serial.println("3");
+          Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "5");
           CurrentReceiverState = Constants::Wait;
         }
             
@@ -235,14 +257,7 @@ void loop()
       // // Send to transmitter begin transfer request for the current packet.
       // Serial.println("Current packet num: " + String(currentPacketNumber));
       // Serial.println("Total Packet Count: " + String(currentTotalPacketCount));
-      if(currentPacketNumber >= currentTotalPacketCount){
-        // done.
-        //Serial.println("Transfer complete.");
-        // currentPacketNumber = 0;
-        // currentTotalPacketCount = 0;
-        CurrentReceiverState = Constants::Wait;
-      }
-      else if(lora_idle){
+      if(lora_idle){
         String txPacketString = String(Constants::ToTrans_Data_Transfer_Command);
         txPacketString.replace("PACKET_NUM", String(currentPacketNumber));
         sprintf(txpacket, txPacketString.c_str());
@@ -271,11 +286,23 @@ void loop()
     if(!WaitingForResponse)
       {
         if(bRxTimeout){
-          Serial.println(Constants::ToHost_Data_Transfer_Error);
-          CurrentReceiverState = Constants::Wait;
+          // Allow 20 timeouts each transfer process..
+          //Serial.print("Timed out ");
+          //Serial.println(packetTimeouts);
+          packetTimeouts++;
+          if(packetTimeouts >= 20){
+            Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "6");
+            CurrentReceiverState = Constants::Wait;
+          }else{
+            CurrentReceiverState = Constants::DataTransferRequest;
+          }
+          
         }else{
           // Check the response. Convert to string for ease of comparison.
           String str = String(rxpacket);
+          //Serial.println("Received pack: ");
+          //Serial.println(rxpacket);
+          //Serial.println("END pack");
           MatchState ms;
           ms.Target(rxpacket);
           char result = ms.Match(Constants::FromTrans_Data_Transfer_Response);
@@ -284,36 +311,59 @@ void loop()
             if(packetNumberLocation == REGEXP_MATCHED){
               int packetNumber = str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
               if(packetNumber == currentPacketNumber){
-                // Write back to host.
-                //totalPacketCount = packetNumber;
-                String toHostResponse_Header = String(Constants::ToHost_Data_Transfer_Response_Header);
-                toHostResponse_Header.replace("PACKET_NUM", str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength));
-                char dataBeginLocation = ms.Match(">.*<");
-                if(dataBeginLocation > 0){
-                  String hostResponse_Full = toHostResponse_Header + 
-                  str.substring(ms.MatchStart + 1, ms.MatchStart + ms.MatchLength - 1) +
-                  String(Constants::ToHost_Data_Transfer_Response_Footer);
-                  Serial.println(hostResponse_Full);
-                  // Move on to the next packet.
-                  currentPacketNumber++;
-                  CurrentReceiverState = Constants::DataTransferRequest;
-                }else{
-                  Serial.println(Constants::ToHost_Data_Transfer_Error);
-                  CurrentReceiverState = Constants::Wait;
+                packetTimeouts = 0;
+                //Write the data received directly to serial, because host & trans uses the same format.
+                //   Serial.println("Camera Data Packet: " + String(currentPacketNumber));
+                //   for(int i = 0; i < strlen(rxpacket); i++){
+                //     Serial.print(rxpacket[i], HEX);
+                //     Serial.print(",");
+                //   }
+                // Serial.println("<DONE>");
+                for(int i = 0; i < sizeof(rxpacket); i++){
+                  Serial.write(rxpacket[i]);
+                 //Serial.println(rxpacket[i], HEX);
                 }
+                
+                // Enter back into Wait.
+                CurrentReceiverState = Constants::Wait;
+
+                // char dataBeginLocation = ms.Match(">.*<");
+                // if(dataBeginLocation > 0){
+                //   // Print off all data as HEX.
+                
+                // // Write back to host.
+                // //totalPacketCount = packetNumber;
+                // String toHostResponse_Header = String(Constants::ToHost_Data_Transfer_Response_Header);
+                // toHostResponse_Header.replace("PACKET_NUM", str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength));
+                
+                //   String hostResponse_Full = toHostResponse_Header + 
+                //   str.substring(ms.MatchStart + 1, ms.MatchStart + ms.MatchLength - 1) +
+                //   String(Constants::ToHost_Data_Transfer_Response_Footer);
+                //   Serial.println(hostResponse_Full);
+                //   // Move on to the next packet.
+                //   currentPacketNumber++;
+                //   CurrentReceiverState = Constants::DataTransferRequest;
+                // }else{
+                //   Serial.println("5");
+                //   Serial.println(Constants::ToHost_Data_Transfer_Error);
+                //   CurrentReceiverState = Constants::Wait;
+                // }
               }else{
-                Serial.println(Constants::ToHost_Data_Transfer_Error);
+                //Serial.println("6");
+                Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "7");
                 CurrentReceiverState = Constants::Wait;
               }
             }else{
-              Serial.println(Constants::ToHost_Data_Transfer_Error);
+              //Serial.println("7");
+              Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "8");
               CurrentReceiverState = Constants::Wait;
             }
             
             
           }
           else{
-            Serial.println(Constants::ToHost_Data_Transfer_Error);
+            //Serial.println("8");
+            Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "9" + rxpacket);
             CurrentReceiverState = Constants::Wait;
           }
               

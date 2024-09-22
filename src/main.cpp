@@ -36,6 +36,7 @@ bool WaitingForResponse = false;
 bool bRxTimeout = false;
 char txpacket[BUFFER_SIZE];
 char rxpacket[BUFFER_SIZE];
+char fullCameraImageData[6000];
 //char* rxpacket_trunc;
 static RadioEvents_t RadioEvents;
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr );
@@ -85,7 +86,7 @@ void loop()
          //Serial.println("Echoing: " + input);
          if(input != ""){
             turnOnRGB(COLOR_JOINED, 10);
-            delay(500);
+            //delay(500);
             input.trim();
             if(input.compareTo(Constants::FromHost_Ping_Command) == 0){
                 CurrentReceiverState = Constants::ReceiverPingRequest;
@@ -159,13 +160,10 @@ void loop()
         if(str.compareTo(Constants::FromTrans_Ping_Camera_Response) == 0)
           Serial.println(Constants::ToHost_Ping_Camera_Response);
           else;
-            //Serial.println("INVALID PING RESPONSE");
       }
-      //Serial.println(Constants::ToHost_Ping_Camera_Timeout);
       // Set state back to wiat.
       CurrentReceiverState = Constants::Wait;
     }else{
-      //Serial.println("Still waiting for response or timeout.");
     }
    
   break;
@@ -204,10 +202,6 @@ void loop()
         // use regex
         MatchState ms;
         ms.Target(rxpacket);
-        //Serial.println("<BEGIN>");
-        //Serial.println(rxpacket);
-        //Serial.println("<END>");
-        // Serial.println(Constants::FromTrans_Capture_Camera_Response);
         char result = ms.Match(Constants::FromTrans_Capture_Camera_Response);
         if(result == REGEXP_MATCHED){
           char packetNumberLocation = ms.Match("%d+");
@@ -215,12 +209,9 @@ void loop()
             
             int packetNumber = str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
 
-            //Serial.println("Number of packets: " + String(packetNumber));
             if(packetNumber > 0){
               // Write back to host.
-              //Serial.println("SETTING PACKET NUMBER!!");
-              //currentTotalPacketCount = (int) packetNumber;
-              //currentPacketNumber = 0;
+              
               String toHostResponse = String(Constants::ToHost_Capture_Camera_Response);
               toHostResponse.replace("PACKETS", String(packetNumber));
               Serial.println(toHostResponse);
@@ -228,13 +219,11 @@ void loop()
 
               CurrentReceiverState = Constants::Wait;
             }else{
-              //Serial.println("1");
               
               Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "3");
               CurrentReceiverState = Constants::Wait;
             }
           }else{
-            //Serial.println("2");
             Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "4");
             CurrentReceiverState = Constants::Wait;
           }
@@ -242,7 +231,6 @@ void loop()
           
         }
         else{
-          //Serial.println("3");
           Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "5");
           CurrentReceiverState = Constants::Wait;
         }
@@ -253,10 +241,7 @@ void loop()
     }
   break;
   case Constants::DataTransferRequest:
-      // Serial.println("DataTransferRequest");
       // // Send to transmitter begin transfer request for the current packet.
-      // Serial.println("Current packet num: " + String(currentPacketNumber));
-      // Serial.println("Total Packet Count: " + String(currentTotalPacketCount));
       if(lora_idle){
         String txPacketString = String(Constants::ToTrans_Data_Transfer_Command);
         txPacketString.replace("PACKET_NUM", String(currentPacketNumber));
@@ -279,16 +264,10 @@ void loop()
 
     break;
   case Constants::DataTransferWait:
-      // Serial.println("DataTransferWait");
-      // // Send to transmitter begin transfer request for the current packet.
-      // Serial.println("Current packet num: " + String(currentPacketNumber));
-      // Serial.println("Total Packet Count: " + String(currentTotalPacketCount));
     if(!WaitingForResponse)
       {
         if(bRxTimeout){
-          // Allow 20 timeouts each transfer process..
-          //Serial.print("Timed out ");
-          //Serial.println(packetTimeouts);
+          // Allow 20 timeouts each transfer process
           packetTimeouts++;
           if(packetTimeouts >= 20){
             Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "6");
@@ -300,9 +279,6 @@ void loop()
         }else{
           // Check the response. Convert to string for ease of comparison.
           String str = String(rxpacket);
-          //Serial.println("Received pack: ");
-          //Serial.println(rxpacket);
-          //Serial.println("END pack");
           MatchState ms;
           ms.Target(rxpacket);
           char result = ms.Match(Constants::FromTrans_Data_Transfer_Response);
@@ -312,49 +288,17 @@ void loop()
               int packetNumber = str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
               if(packetNumber == currentPacketNumber){
                 packetTimeouts = 0;
-                //Write the data received directly to serial, because host & trans uses the same format.
-                //   Serial.println("Camera Data Packet: " + String(currentPacketNumber));
-                //   for(int i = 0; i < strlen(rxpacket); i++){
-                //     Serial.print(rxpacket[i], HEX);
-                //     Serial.print(",");
-                //   }
-                // Serial.println("<DONE>");
                 for(int i = 0; i < sizeof(rxpacket); i++){
                   Serial.write(rxpacket[i]);
-                 //Serial.println(rxpacket[i], HEX);
                 }
                 
                 // Enter back into Wait.
                 CurrentReceiverState = Constants::Wait;
-
-                // char dataBeginLocation = ms.Match(">.*<");
-                // if(dataBeginLocation > 0){
-                //   // Print off all data as HEX.
-                
-                // // Write back to host.
-                // //totalPacketCount = packetNumber;
-                // String toHostResponse_Header = String(Constants::ToHost_Data_Transfer_Response_Header);
-                // toHostResponse_Header.replace("PACKET_NUM", str.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength));
-                
-                //   String hostResponse_Full = toHostResponse_Header + 
-                //   str.substring(ms.MatchStart + 1, ms.MatchStart + ms.MatchLength - 1) +
-                //   String(Constants::ToHost_Data_Transfer_Response_Footer);
-                //   Serial.println(hostResponse_Full);
-                //   // Move on to the next packet.
-                //   currentPacketNumber++;
-                //   CurrentReceiverState = Constants::DataTransferRequest;
-                // }else{
-                //   Serial.println("5");
-                //   Serial.println(Constants::ToHost_Data_Transfer_Error);
-                //   CurrentReceiverState = Constants::Wait;
-                // }
               }else{
-                //Serial.println("6");
                 Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "7");
                 CurrentReceiverState = Constants::Wait;
               }
             }else{
-              //Serial.println("7");
               Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "8");
               CurrentReceiverState = Constants::Wait;
             }
@@ -362,7 +306,6 @@ void loop()
             
           }
           else{
-            //Serial.println("8");
             Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "9" + rxpacket);
             CurrentReceiverState = Constants::Wait;
           }
@@ -384,17 +327,14 @@ void loop()
       rxSize=size;
       memcpy(rxpacket, payload, size );
       // Copy to trunced point for ease of comparison.
-      //memcpy(rxpacket_trunc,payload,size );
       rxpacket[size]='\0';
       turnOnRGB(COLOR_RECEIVED,0);
       Radio.Sleep( );
-      //Serial.printf("\r\nreceived packet \"%s\" with rssi %d , length %d\r\n",rxpacket,rssi,rxSize);
       lora_idle = true;
   }
   void OnTxDone( void )
   {
     turnOffRGB();
-    //Serial.println("TX done......");
     lora_idle = true;
   }
 
@@ -402,7 +342,6 @@ void loop()
   {
     turnOffRGB();
     Radio.Sleep( );
-    //Serial.println("TX Timeout......");
     lora_idle = true;
   }
   void OnRxTimeout( void )

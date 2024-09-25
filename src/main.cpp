@@ -74,49 +74,45 @@ void setup() {
 
 void loop()
 {
-  delay(100);
+  delay(10);
+  String input;
   switch (CurrentReceiverState)
   {
   case Constants::Wait:
    turnOffRGB();
-    // Read in from serial.
-    if(true){
-        // First, read in.
-        String input = Serial.readString();
-         //Serial.println("Echoing: " + input);
-         if(input != ""){
-            turnOnRGB(COLOR_JOINED, 10);
-            //delay(500);
-            input.trim();
-            if(input.compareTo(Constants::FromHost_Ping_Command) == 0){
-                CurrentReceiverState = Constants::ReceiverPingRequest;
-            }else if(input.compareTo(Constants::FromHost_Ping_Camera_Command) == 0){
-                CurrentReceiverState = Constants::CameraPingRequest;
-            
-            }else if(input.compareTo(Constants::FromHost_Capture_Camera_Command) == 0)
-              CurrentReceiverState = Constants::CameraCaptureRequest;
-            else{
-              // Parse the data packet we are requesting.
-              MatchState ms;
-              ms.Target((char*)input.c_str());
-              char result = ms.Match(Constants::FromHost_Data_Transfer_Request);
-              if(result == REGEXP_MATCHED){
-                char packetNumberLocation = ms.Match("%d+");
-                if(packetNumberLocation == REGEXP_MATCHED){
-                    int packetNumber = input.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
-                    currentPacketNumber = packetNumber;
-                    CurrentReceiverState = Constants::DataTransferRequest;
-                }else{
-                  Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "1");
-                }
-              }else{
-                Serial.println(String(Constants::ToHost_Data_Transfer_Error) + 2);
-              }
-            }
-         }
-        
-        
+    // First, read in.
+    input = Serial.readString();
+    //Serial.println("Echoing: " + input);
+    if(input != ""){
+      turnOnRGB(COLOR_JOINED, 10);
+      input.trim();
+      if(input.compareTo(Constants::FromHost_Ping_Command) == 0){
+          CurrentReceiverState = Constants::ReceiverPingRequest;
+      }else if(input.compareTo(Constants::FromHost_Ping_Camera_Command) == 0){
+          CurrentReceiverState = Constants::CameraPingRequest;
+      
+      }else if(input.compareTo(Constants::FromHost_Capture_Camera_Command) == 0)
+        CurrentReceiverState = Constants::CameraCaptureRequest;
+      else{
+        // Parse the data packet we are requesting.
+        MatchState ms;
+        ms.Target((char*)input.c_str());
+        char result = ms.Match(Constants::FromHost_Data_Transfer_Request);
+        if(result == REGEXP_MATCHED){
+          char packetNumberLocation = ms.Match("%d+");
+          if(packetNumberLocation == REGEXP_MATCHED){
+              int packetNumber = input.substring(ms.MatchStart, ms.MatchStart + ms.MatchLength).toInt();
+              currentPacketNumber = packetNumber;
+              CurrentReceiverState = Constants::DataTransferRequest;
+          }else{
+            Serial.println(String(Constants::ToHost_Data_Transfer_Error) + "1");
+          }
+        }else{
+          Serial.println(String(Constants::ToHost_Data_Transfer_Error) + 2);
+        }
+      }
     }
+        
     break;
   case Constants::ReceiverPingRequest:
     Serial.flush();
@@ -329,7 +325,6 @@ void loop()
       // Copy to trunced point for ease of comparison.
       rxpacket[size]='\0';
       turnOnRGB(COLOR_RECEIVED,0);
-      Radio.Sleep( );
       lora_idle = true;
   }
   void OnTxDone( void )
@@ -341,13 +336,11 @@ void loop()
   void OnTxTimeout( void )
   {
     turnOffRGB();
-    Radio.Sleep( );
     lora_idle = true;
   }
   void OnRxTimeout( void )
   {
     turnOffRGB();
-    Radio.Sleep( );
     WaitingForResponse = false;
     bRxTimeout = true;
     lora_idle = true;
